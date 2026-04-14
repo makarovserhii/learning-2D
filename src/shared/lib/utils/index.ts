@@ -1,4 +1,4 @@
-import type { Vector2 } from '../shared/lib/types/types';
+import type { Vector2 } from '../types/types';
 
 export const randomInRange = (min: number, max: number): number => {
   return min + Math.random() * (max - min);

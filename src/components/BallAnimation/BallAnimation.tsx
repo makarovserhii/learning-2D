@@ -218,8 +218,7 @@ export function BallAnimation() {
       </div>
 
       <div className='headline-block'>
-        <div className='eyebrow'>Interactive banner prototype</div>
-        <h1 className='headline'>Motion-based CTA scene</h1>
+        <h1 className='headline'>Single Object Animation</h1>
         <p className='lead'>
           One loop, deltaTime, bounce, hover slowdown and click reaction.
         </p>

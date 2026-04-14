@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getRandomVelocity } from '../../utils';
+import { getRandomVelocity } from '../../shared/lib/utils';
 
 import type { PointerState, SceneEntity } from '../../shared/lib/types/types';
 import type { Vector2 } from '../../shared/lib/types/types';
+
+import _ from 'lodash';
 
 import {
   MULTIPLE_OBJECTS_SCENE_CONSTANTS,
@@ -11,13 +13,13 @@ import {
   SQUARE_2_BODY_CONSTANTS,
 } from '../../shared/lib/constants/constants';
 
-import './BallAndSquareAnimation.css';
+import './DraggableObjects.css';
 
 function getPairKey(aId: string, bId: string) {
   return aId < bId ? `${aId}|${bId}` : `${bId}|${aId}`;
 }
 
-export function BallAndSquareAnimation() {
+export function DraggableObjects() {
   const sceneRef = useRef<HTMLDivElement | null>(null);
 
   const ballRef = useRef<HTMLDivElement | null>(null);
@@ -45,26 +47,33 @@ export function BallAndSquareAnimation() {
     grabbedEntityId: null,
     dragOffsetX: 0,
     dragOffsetY: 0,
+    lastDeltaX: 0,
+    lastDeltaY: 0,
+  });
+
+  const [debug, setDebug] = useState({
+    fps: 0,
+    slowMode: false,
   });
 
   const entitiesRef = useRef<SceneEntity[]>([
     {
-      id: 'ball',
+      id: 'ball-1',
       kind: 'ball',
       elementRef: ballRef,
-      body: BALL_BODY_CONSTANTS,
+      body: _.cloneDeep(BALL_BODY_CONSTANTS),
     },
     {
-      id: 'square',
+      id: 'square-1',
       kind: 'square',
       elementRef: squareRef,
-      body: SQUARE_BODY_CONSTANTS,
+      body: _.cloneDeep(SQUARE_BODY_CONSTANTS),
     },
     {
       id: 'square-2',
       kind: 'square-2',
       elementRef: square2Ref,
-      body: SQUARE_2_BODY_CONSTANTS,
+      body: _.cloneDeep(SQUARE_2_BODY_CONSTANTS),
     },
   ]);
 
@@ -83,19 +92,6 @@ export function BallAndSquareAnimation() {
       timestamp: Date.now(),
     });
   };
-
-  const [debug, setDebug] = useState({
-    ballX: 0,
-    ballY: 0,
-    ballVx: 0,
-    ballVy: 0,
-    squareX: 0,
-    squareY: 0,
-    squareVx: 0,
-    squareVy: 0,
-    fps: 0,
-    slowMode: false,
-  });
 
   const renderEntity = useCallback(
     (element: HTMLDivElement | null, position: Vector2) => {
@@ -172,21 +168,8 @@ export function BallAndSquareAnimation() {
   );
 
   const updateDebug = useCallback(() => {
-    const ballPosition = entitiesRef.current[0].body.position;
-    const ballVelocity = entitiesRef.current[0].body.velocity;
-    const squarePosition = entitiesRef.current[1].body.position;
-    const squareVelocity = entitiesRef.current[1].body.velocity;
-
     setDebug((prev) => ({
       ...prev,
-      ballX: Number(ballPosition.x.toFixed(1)),
-      ballY: Number(ballPosition.y.toFixed(1)),
-      ballVx: Number(ballVelocity.x.toFixed(1)),
-      ballVy: Number(ballVelocity.y.toFixed(1)),
-      squareX: Number(squarePosition.x.toFixed(1)),
-      squareY: Number(squarePosition.y.toFixed(1)),
-      squareVx: Number(squareVelocity.x.toFixed(1)),
-      squareVy: Number(squareVelocity.y.toFixed(1)),
       slowMode: isSlowModeRef.current,
     }));
   }, []);
@@ -203,64 +186,159 @@ export function BallAndSquareAnimation() {
     [],
   );
 
+  const calculateObjectPairParameters = useCallback(
+    (entityA: SceneEntity, entityB: SceneEntity) => {
+      const oldVxA = entityA.body.velocity.x;
+      const oldVyA = entityA.body.velocity.y;
+      const oldVxB = entityB.body.velocity.x;
+      const oldVyB = entityB.body.velocity.y;
+
+      const aLeft = entityA.body.position.x;
+      const aRight = entityA.body.position.x + entityA.body.size;
+      const bLeft = entityB.body.position.x;
+      const bRight = entityB.body.position.x + entityB.body.size;
+
+      const aTop = entityA.body.position.y;
+      const aBottom = entityA.body.position.y + entityA.body.size;
+      const bTop = entityB.body.position.y;
+      const bBottom = entityB.body.position.y + entityB.body.size;
+
+      const overlapX = Math.min(aRight, bRight) - Math.max(aLeft, bLeft);
+      const overlapY = Math.min(aBottom, bBottom) - Math.max(aTop, bTop);
+
+      const isALeftOfB = aLeft < bLeft;
+      const isATopOfB = aTop < bTop;
+
+      return {
+        oldVxA,
+        oldVyA,
+        oldVxB,
+        oldVyB,
+        overlapX,
+        overlapY,
+        isALeftOfB,
+        isATopOfB,
+      };
+    },
+    [],
+  );
+
+  const resolveKinematicCollision = useCallback(
+    (entityA: SceneEntity, entityB: SceneEntity) => {
+      const {
+        oldVxA,
+        oldVyA,
+        oldVxB,
+        oldVyB,
+        overlapX,
+        overlapY,
+        isALeftOfB,
+        isATopOfB,
+      } = calculateObjectPairParameters(entityA, entityB);
+
+      if (overlapX < overlapY) {
+        entityA.body.velocity.x = oldVxB;
+        entityB.body.velocity.x = oldVxA;
+
+        if (isALeftOfB) {
+          entityA.body.position.x -= overlapX / 2;
+          entityB.body.position.x += overlapX / 2;
+        } else {
+          entityA.body.position.x += overlapX / 2;
+          entityB.body.position.x -= overlapX / 2;
+        }
+      } else {
+        entityA.body.velocity.y = oldVyB;
+        entityB.body.velocity.y = oldVyA;
+
+        if (isATopOfB) {
+          entityA.body.position.y -= overlapY / 2;
+          entityB.body.position.y += overlapY / 2;
+        } else {
+          entityA.body.position.y += overlapY / 2;
+          entityB.body.position.y -= overlapY / 2;
+        }
+      }
+    },
+    [calculateObjectPairParameters],
+  );
+
+  const resolveDraggingCollision = useCallback(
+    (entityA: SceneEntity, entityB: SceneEntity) => {
+      const { overlapX, overlapY, isALeftOfB, isATopOfB } =
+        calculateObjectPairParameters(entityA, entityB);
+
+      const isADragging = entityA.body.isDragging;
+      const isBDragging = entityB.body.isDragging;
+
+      if (isADragging && isBDragging) return;
+
+      if (isADragging) {
+        if (overlapX < overlapY) {
+          entityB.body.velocity.x *= -1;
+
+          if (isALeftOfB) {
+            entityB.body.position.x += overlapX;
+          } else {
+            entityB.body.position.x -= overlapX;
+          }
+        } else {
+          entityB.body.velocity.y *= -1;
+
+          if (isATopOfB) {
+            entityB.body.position.y += overlapY;
+          } else {
+            entityB.body.position.y -= overlapY;
+          }
+        }
+      } else if (isBDragging) {
+        if (overlapX < overlapY) {
+          entityA.body.velocity.x *= -1;
+
+          if (isALeftOfB) {
+            entityA.body.position.x -= overlapX;
+          } else {
+            entityA.body.position.x += overlapX;
+          }
+        } else {
+          entityA.body.velocity.y *= -1;
+
+          if (isATopOfB) {
+            entityA.body.position.y -= overlapY;
+          } else {
+            entityA.body.position.y += overlapY;
+          }
+        }
+      }
+    },
+    [calculateObjectPairParameters],
+  );
+
   const reactOnIntersecting = useCallback(
     (entityA: SceneEntity, entityB: SceneEntity) => {
       const isIntersectingNow = isIntersecting(entityA, entityB);
       const pairKey = getPairKey(entityA.id, entityB.id);
-
-      if (isIntersectingNow && !intersectingPairsRef.current.get(pairKey)) {
-        intersectingPairsRef.current.set(pairKey, true);
-        const oldVxA = entityA.body.velocity.x;
-        const oldVyA = entityA.body.velocity.y;
-        const oldVxB = entityB.body.velocity.x;
-        const oldVyB = entityB.body.velocity.y;
-
-        const aLeft = entityA.body.position.x;
-        const aRight = entityA.body.position.x + entityA.body.size;
-        const bLeft = entityB.body.position.x;
-        const bRight = entityB.body.position.x + entityB.body.size;
-
-        const aTop = entityA.body.position.y;
-        const aBottom = entityA.body.position.y + entityA.body.size;
-        const bTop = entityB.body.position.y;
-        const bBottom = entityB.body.position.y + entityB.body.size;
-
-        const overlapX = Math.min(aRight, bRight) - Math.max(aLeft, bLeft);
-        const overlapY = Math.min(aBottom, bBottom) - Math.max(aTop, bTop);
-
-        const isALeftOfB = aLeft < bLeft;
-        const isATopOfB = aTop < bTop;
-
-        if (overlapX < overlapY) {
-          entityA.body.velocity.x = oldVxB;
-          entityB.body.velocity.x = oldVxA;
-
-          if (isALeftOfB) {
-            entityA.body.position.x -= overlapX / 2;
-            entityB.body.position.x += overlapX / 2;
-          } else {
-            entityA.body.position.x += overlapX / 2;
-            entityB.body.position.x -= overlapX / 2;
-          }
-        } else {
-          entityA.body.velocity.y = oldVyB;
-          entityB.body.velocity.y = oldVyA;
-
-          if (isATopOfB) {
-            entityA.body.position.y -= overlapY / 2;
-            entityB.body.position.y += overlapY / 2;
-          } else {
-            entityA.body.position.y += overlapY / 2;
-            entityB.body.position.y -= overlapY / 2;
-          }
-        }
-      }
+      const isPairActive = intersectingPairsRef.current.get(pairKey);
 
       if (!isIntersectingNow) {
         intersectingPairsRef.current.delete(pairKey);
+        return;
+      }
+
+      const isDraggingCollision =
+        entityA.body.isDragging || entityB.body.isDragging;
+
+      if (isDraggingCollision) {
+        resolveDraggingCollision(entityA, entityB);
+        return;
+      }
+
+      if (!isPairActive) {
+        intersectingPairsRef.current.set(pairKey, true);
+        resolveKinematicCollision(entityA, entityB);
       }
     },
-    [isIntersecting],
+    [isIntersecting, resolveDraggingCollision, resolveKinematicCollision],
   );
 
   const getEntityAtPosition = useCallback(
@@ -475,14 +553,6 @@ export function BallAndSquareAnimation() {
         className='debug-panel'
         style={{ pointerEvents: 'none', userSelect: 'none' }}
       >
-        <div>ballX: {debug.ballX}</div>
-        <div>ballY: {debug.ballY}</div>
-        <div>ballVx: {debug.ballVx}</div>
-        <div>ballVy: {debug.ballVy}</div>
-        <div>squareX: {debug.squareX}</div>
-        <div>squareY: {debug.squareY}</div>
-        <div>squareVx: {debug.squareVx}</div>
-        <div>squareVy: {debug.squareVy}</div>
         <div>fps: {debug.fps}</div>
         <div>slow: {debug.slowMode ? 'on' : 'off'}</div>
       </div>
@@ -491,10 +561,10 @@ export function BallAndSquareAnimation() {
         className='headline-block'
         style={{ pointerEvents: 'none', userSelect: 'none' }}
       >
-        <div className='eyebrow'>Interactive banner prototype</div>
-        <h1 className='headline'>Motion-based CTA scene</h1>
+        <h1 className='headline'>Draggable Objects</h1>
         <p className='lead'>
-          One loop, deltaTime, bounce, hover slowdown and click reaction.
+          One loop, physics-based interactions, deltaTime, bounce, hover
+          slowdown and click reaction for multiple draggable objects.
         </p>
       </div>
 

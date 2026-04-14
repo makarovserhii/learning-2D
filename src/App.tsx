@@ -1,12 +1,14 @@
 import './App.css';
 import { BallAnimation } from './components/BallAnimation/BallAnimation';
-import { BallAndSquareAnimation } from './components/BallAndSquareAnimation/BallAndSquareAnimation';
+import { MultipleObjectsAnimation } from './components/MultipleObjectsAnimation/MultipleObjectsAnimation';
+import { DraggableObjects } from './components/DraggableObjects/DraggableObjects';
 
 function App() {
   return (
     <div className='page'>
       <BallAnimation />
-      <BallAndSquareAnimation />
+      <MultipleObjectsAnimation />
+      <DraggableObjects />
     </div>
   );
 }
