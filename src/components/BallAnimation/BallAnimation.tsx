@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './BallAnimation.css';
-import type { PointerState } from '../../shared/lib/types/types';
 
 type Vector2 = {
   x: number;
@@ -48,17 +47,6 @@ export function BallAnimation() {
   const ballVelocityRef = useRef<Vector2>(
     getRandomVelocity(BASE_SPEED_MIN, BASE_SPEED_MAX),
   );
-
-  const pointerRef = useRef<PointerState>({
-    x: 0,
-    y: 0,
-    previousX: 0,
-    previousY: 0,
-    isDown: false,
-    grabbedEntityId: null,
-    dragOffsetX: 0,
-    dragOffsetY: 0,
-  });
 
   const bgOffsetRef = useRef<number>(0);
   const ctaPulseTimeRef = useRef<number>(0);
